@@ -1,0 +1,263 @@
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+
+local Window = Library.CreateLib("KIRA7x hub by@Victor", "Ocean")
+
+local Tab = Window:NewTab("player")
+
+local Section = Tab:NewSection("Main player")
+
+Section:NewToggle("speed 100", "ToggleInfo", function(state)
+    if state then
+        print("Toggle On")
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 100
+    else
+        print("Toggle Off")
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 16
+    end
+end)
+
+
+Section:NewSlider("speed player", "SliderInfo", 500, 0, function(s) -- 500 (MaxValue) | 0 (MinValue)
+    game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = s
+end)
+
+Section:NewSlider("JumpPower", "SliderInfo", 200,7.2, function(s) -- 200 (MaxValue) | 0 (MinValue)
+    game.Players.LocalPlayer.Character.Humanoid.JumpPower = s
+end)
+
+Section:NewTextBox("SpeedType", "ใส่ตัวเลข", function(txt)
+	game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = txt
+end)
+
+Section:NewTextBox("SpeedType", "ใส่ตัวเลข", function(txt)
+	game.Players.LocalPlayer.Character.Humanoid.JumpPower = txt
+end)
+
+Section:NewButton("NIVICIBLE", "ButtonInfo", function()
+    print("Clicked")
+	--[[
+	WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+]]
+-- Configurações do clone
+local Transparency = true
+-- Variáveis globais
+local Player = game.Players.LocalPlayer
+local RealCharacter = Player.Character or Player.CharacterAdded:Wait()
+local IsInvisible = false
+local player = game.Players.LocalPlayer
+local character = player.Character
+local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+RealCharacter.Archivable = true
+local FakeCharacter
+
+-- Função para criar o clone
+local function CreateClone()
+    -- Certifique-se de estar no Studio com "Explorer" e "Properties" abertos.
+
+    local b = game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart"):FindFirstChild("BodyVelocity")
+
+    if b then
+        b.P = 0
+        b.MaxForce = Vector3.new(0, 0, 0)
+    end
+
+    FakeCharacter = RealCharacter:Clone()
+
+    -- Remover propriedades indesejadas do clone
+    for _, v in pairs(FakeCharacter:GetDescendants()) do
+        if v:IsA("BodyVelocity") or v:IsA("BodyGyro") or v:IsA("BodyPosition") then
+            v:Destroy() -- Remove as propriedades indesejadas
+        end
+    end
+
+    bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.MaxForce = Vector3.new(500000, 500000, 500000) -- Força para impedir a gravidade
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0) -- Sem movimento inicial
+    bodyVelocity.Parent = FakeCharacter.HumanoidRootPart
+
+    -- Posiciona o clone no mesmo lugar que o personagem real
+    FakeCharacter.Parent = workspace
+    FakeCharacter.HumanoidRootPart.CFrame = RealCharacter.HumanoidRootPart.CFrame
+    FakeCharacter.HumanoidRootPart.Anchored = false
+
+    -- Define a velocidade do clone para ser o dobro da velocidade do personagem real
+    FakeCharacter.Humanoid.WalkSpeed = RealCharacter.Humanoid.WalkSpeed * 2
+
+    -- Aplica a transparência ao clone
+    if Transparency then
+        for _, v in pairs(FakeCharacter:GetDescendants()) do
+            if v:IsA("BasePart") and v.Transparency < 1 then
+                v.Transparency = 0.85
+            end
+        end
+    end
+
+    -- Copia o Animator do personagem real para o clone
+    local RealAnimator = RealCharacter:FindFirstChildOfClass("Animator")
+    if RealAnimator then
+        local CloneAnimator = RealAnimator:Clone()
+        CloneAnimator.Parent = FakeCharacter
+    end
+
+    -- Desativa scripts locais no clone
+    for _, v in pairs(RealCharacter:GetChildren()) do
+        if v:IsA("LocalScript") then
+            local clone = v:Clone()
+            clone.Disabled = true
+            clone.Parent = FakeCharacter
+        end
+    end
+
+    -- Sincroniza a câmera com o clone
+    workspace.CurrentCamera.CameraSubject = FakeCharacter.Humanoid
+
+    -- Leva o personagem real para uma posição muito distante
+    local x = RealCharacter.HumanoidRootPart.CFrame + Vector3.new(0, 1e8, 0)
+    IsInvisible = true
+
+    spawn(
+        function()
+            for i = 1, 90 do
+                if IsInvisible then
+                    RealCharacter.HumanoidRootPart.CFrame = x
+                    task.wait(0.1)
+                end
+            end
+        end
+    )
+
+    task.wait(0.1)
+
+    -- Sincroniza o movimento e o voo do clone com a direção da câmera
+    game:GetService("RunService").RenderStepped:Connect(
+        function()
+            local moveDirection2 = humanoid.MoveDirection
+
+            if IsInvisible and moveDirection2.Magnitude > 0 then
+                bodyVelocity.Parent = nil
+
+                -- Move o clone na direção da câmera
+                local camera = workspace.CurrentCamera
+                local moveDirection = camera.CFrame.LookVector
+
+                -- Determinar se está indo para trás
+                local isMovingBackward = moveDirection:Dot(moveDirection2) < 0
+
+                -- Ajustar o valor de y
+                local adjustedY = isMovingBackward and (moveDirection.Y * -1.4) or (moveDirection.Y * 1.8)
+                local adjustedV = isMovingBackward and (1.4) or (1.6)
+
+                FakeCharacter.HumanoidRootPart.Velocity =
+                    Vector3.new(moveDirection2.X, adjustedY + 0.35, moveDirection2.Z).Unit *
+                    (FakeCharacter.Humanoid.WalkSpeed * adjustedV)
+            elseif (moveDirection2.Magnitude == 0) and IsInvisible then
+                bodyVelocity.Parent = FakeCharacter.HumanoidRootPart
+            end
+        end
+    )
+end
+
+-- Função para teleportar o personagem real para a posição do clone e apagar o clone
+local function TeleportAndRemoveClone()
+    if IsInvisible then
+        RealCharacter.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+
+        for _, v in pairs(FakeCharacter:GetDescendants()) do
+            if v:IsA("BasePart") and v.Transparency < 1 then
+                v.Transparency = 1
+            end
+        end
+
+        IsInvisible = false
+
+        for i = 1, 5 do
+            if not IsInvisible then
+                RealCharacter.HumanoidRootPart.CFrame = FakeCharacter.HumanoidRootPart.CFrame
+                task.wait()
+            end
+        end
+
+        -- Remove o clone e foca a câmera de volta no personagem real
+        FakeCharacter:Destroy()
+        workspace.CurrentCamera.CameraSubject = RealCharacter.Humanoid
+    end
+end
+
+-- Adiciona o item no inventário e configura a ativação do script
+InvisibilityCloak = Instance.new("Tool")
+InvisibilityCloak.Name = "กดเพื่อล่องหน"
+InvisibilityCloak.RequiresHandle = false
+InvisibilityCloak.Parent = Player.Backpack
+-- Adiciona o item no inventário e configura a ativação do script
+InvisibilityCloak.Equipped:Connect(
+    function()
+        if not IsInvisible then
+            CreateClone()
+        end
+    end
+)
+
+InvisibilityCloak.Unequipped:Connect(
+    function()
+        if IsInvisible then
+            TeleportAndRemoveClone()
+        end
+    end
+)
+
+-- Som opcional e notificação
+local Sound = Instance.new("Sound", game:GetService("SoundService"))
+Sound.SoundId = "rbxassetid://157636218"
+Sound:Play()
+
+game:GetService("StarterGui"):SetCore(
+    "SendNotification",
+    {
+        Title = "เปิดโปรล่องหนไอ้สัส",
+        Text = "ล่องละน้าาา",
+        Duration = 20,
+        Button1 = "Okay."
+    }
+)
+
+end)
+
+Section:NewButton("Get Click to To", "กดเพื่อรับไอเท็มวาร์ป", function()
+    local player = game.Players.LocalPlayer
+    local Backpack = player:WaitForChild("Backpack")
+
+    -- เช็คว่า Tool มีอยู่แล้วหรือยัง
+    if not Backpack:FindFirstChild("自由เทเลพอร์ต") then
+        local tpTool = Instance.new("Tool")
+        tpTool.Name = "Click to Tp"
+        tpTool.RequiresHandle = false
+        tpTool.Parent = Backpack
+
+        local mouseConnection -- เก็บการเชื่อมต่อฟังก์ชั่นไว้
+        tpTool.Equipped:Connect(function()
+            local mouse = player:GetMouse()
+            -- เปิดฟังก์ชั่นคลิกเพื่อเทเลพอร์ต
+            mouseConnection = mouse.Button1Down:Connect(function()
+                local character = player.Character or player.CharacterAdded:Wait()
+                local hrp = character:FindFirstChild("HumanoidRootPart")
+                if hrp and mouse.Target then
+                    hrp.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
+                end
+            end)
+        end)
+
+        tpTool.Unequipped:Connect(function()
+            -- ปิดฟังก์ชั่น เมื่อเลิกถือ Tool
+            if mouseConnection then
+                mouseConnection:Disconnect()
+                mouseConnection = nil
+            end
+        end)
+    end
+end)
+
+Section:NewKeybind("Keybind", "KeybindInfo", Enum.KeyCode.RightControl, function()
+	Library:ToggleUI()
+end)
+
