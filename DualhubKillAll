@@ -1,0 +1,143 @@
+-- ===== Services =====
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local UserInputService = game:GetService("UserInputService")
+
+-- ===== SETTINGS =====
+local correctKey = "dualhub"
+local KeyVerified = false -- เก็บสถานะว่าผ่าน Key แล้ว
+local SavedPosition = nil 
+local AttackDuration = 3
+local AttackInterval = 0.001
+local IsAttacking = false
+local Connection = nil
+
+-- ===== Weapon setup =====
+local WeaponNameEncoded = "\224\184\161\224\184\181\224\184\148\224\184\158\224\184\129"
+local Weapon = LocalPlayer.Backpack:WaitForChild(WeaponNameEncoded) or LocalPlayer.Character:WaitForChild(WeaponNameEncoded)
+if not Weapon then warn("Weapon not found.") return end
+local AttackRemote = Weapon:WaitForChild("FEMeleeKitEvents"):WaitForChild("Attack"):WaitForChild("Attack_Server")
+if not AttackRemote then warn("Attack_Server RemoteEvent not found.") end
+
+local BaseArgs = {
+    nil, Weapon:WaitForChild("Handle"),
+    [4] = { AttackDelay = 0.001, AnimationTable = { {ID = "rbxassetid://79412744323332", speed = {0.8}, hitboxTimes = {0, 4}, animationType = "Attack"}, },
+        BaseDamage = {99999, 99999}, Handle1Hitbox = true, Handle2Hitbox = false,
+    },
+    [5] = 3
+}
+
+-- ===== FUNCTIONS =====
+local function InstantAttackAllTargets()
+    for _, Player in ipairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild("Humanoid") and Player.Character.Humanoid.Health > 0 then
+            BaseArgs[1] = Player.Character
+            AttackRemote:FireServer(unpack(BaseArgs))
+        end
+    end
+    task.wait(AttackInterval)
+end
+
+local function KillAllAndRejoinCycle()
+    local Character = LocalPlayer.Character
+    local HRP = Character and Character:FindFirstChild("HumanoidRootPart")
+    if IsAttacking or not HRP then return end
+    IsAttacking = true
+    
+    SavedPosition = HRP.CFrame
+    Connection = RunService.Heartbeat:Connect(InstantAttackAllTargets)
+    task.wait(AttackDuration)
+    if Connection then Connection:Disconnect() Connection = nil end
+
+    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+end
+
+LocalPlayer.CharacterAdded:Connect(function(Character)
+    local HRP = Character:WaitForChild("HumanoidRootPart", 10)
+    if HRP and SavedPosition then
+        task.wait(0.5)
+        HRP.CFrame = SavedPosition
+        SavedPosition = nil
+        IsAttacking = false
+        warn("Warped back to saved position.")
+    end
+end)
+
+-- ===== KAVO UI =====
+local function LoadKavoUI()
+    local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+    local Window = Library.CreateLib("DualHub Main", "GrapeTheme") -- GrapeTheme
+
+    -- ===== Tab Key =====
+    local KeyTab = Window:NewTab("Key")
+    local KeySection = KeyTab:NewSection("Enter Your Key")
+
+    KeySection:NewTextBox("Enter Key...", "Type your key here", function(text)
+        local ScreenGui = Instance.new("ScreenGui")
+        ScreenGui.Name = "KeyPopup"
+        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+        local Frame = Instance.new("Frame")
+        Frame.Size = UDim2.new(0, 300, 0, 100)
+        Frame.Position = UDim2.new(0.5, -150, 0.5, -50)
+        Frame.BorderSizePixel = 0
+        Frame.Parent = ScreenGui
+
+        local Label = Instance.new("TextLabel")
+        Label.Size = UDim2.new(1, 0, 1, 0)
+        Label.BackgroundTransparency = 1
+        Label.TextScaled = true
+        Label.Font = Enum.Font.GothamBold
+        Label.Parent = Frame
+
+        if text == correctKey then
+            KeyVerified = true
+            Frame.BackgroundColor3 = Color3.fromRGB(128, 0, 128) -- ม่วง
+            Label.Text = "✅ Verify Succeed"
+            Label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            Frame.BackgroundColor3 = Color3.fromRGB(170, 0, 0) -- แดง
+            Label.Text = "❌ Invalid Key!"
+            Label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        end
+
+        -- ให้ข้อความหายไปหลัง 2 วินาที
+        task.delay(2, function()
+            ScreenGui:Destroy()
+        end)
+    end)
+
+    -- ===== Tab Main =====
+    local MainTab = Window:NewTab("Main")
+    local MainSection = MainTab:NewSection("Functions")
+
+    MainSection:NewButton("Start Save, Kill & Rejoin", "Execute function", function()
+        if KeyVerified then
+            KillAllAndRejoinCycle()
+        else
+            warn("❌ You must enter the correct key first!")
+        end
+    end)
+
+    -- Keybind N
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not gameProcessed and input.KeyCode == Enum.KeyCode.N then
+            if KeyVerified then
+                KillAllAndRejoinCycle()
+            else
+                warn("❌ You must enter the correct key first!")
+            end
+        end
+    end)
+
+    -- ===== Credits Tab =====
+    local CreditsTab = Window:NewTab("Credits")
+    local CreditsSection = CreditsTab:NewSection("Developers")
+    CreditsSection:NewLabel("Dev Chx")
+    CreditsSection:NewLabel("Dev Victor")
+end
+
+-- เริ่ม UI
+LoadKavoUI()
