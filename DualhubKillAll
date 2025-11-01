@@ -1,20 +1,13 @@
--- ===== Services =====
+-- Mini Purple 3D UI + Key + KillAllAndRejoin Feature
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
-local UserInputService = game:GetService("UserInputService")
 
--- ===== SETTINGS =====
-local correctKey = "dualhub"
-local KeyVerified = false -- เก็บสถานะว่าผ่าน Key แล้ว
+-- ================== ฟังก์ชัน KillAllAndRejoin ==================
 local SavedPosition = nil 
 local AttackDuration = 3
-local AttackInterval = 0.001
-local IsAttacking = false
-local Connection = nil
 
--- ===== Weapon setup =====
 local WeaponNameEncoded = "\224\184\161\224\184\181\224\184\148\224\184\158\224\184\129"
 local Weapon = LocalPlayer.Backpack:WaitForChild(WeaponNameEncoded) or LocalPlayer.Character:WaitForChild(WeaponNameEncoded)
 if not Weapon then warn("Weapon not found.") return end
@@ -29,27 +22,44 @@ local BaseArgs = {
     [5] = 3
 }
 
--- ===== FUNCTIONS =====
+local IsAttacking = false
+local Connection = nil
+local AttackInterval = 0.001
+
 local function InstantAttackAllTargets()
+    local Targets = {}
     for _, Player in ipairs(Players:GetPlayers()) do
         if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild("Humanoid") and Player.Character.Humanoid.Health > 0 then
-            BaseArgs[1] = Player.Character
-            AttackRemote:FireServer(unpack(BaseArgs))
+            table.insert(Targets, Player.Character)
         end
     end
-    task.wait(AttackInterval)
+    for _, TargetCharacter in ipairs(Targets) do
+        BaseArgs[1] = TargetCharacter 
+        AttackRemote:FireServer(unpack(BaseArgs))
+    end
+    task.wait(AttackInterval) 
 end
 
-local function KillAllAndRejoinCycle()
+local function KillAllAndRejoinCycle(ToggleButton)
     local Character = LocalPlayer.Character
     local HRP = Character and Character:FindFirstChild("HumanoidRootPart")
     if IsAttacking or not HRP then return end
     IsAttacking = true
-    
     SavedPosition = HRP.CFrame
+    
+    ToggleButton.Text = "SAVED POSITION. RUNNING KILL ALL... (" .. AttackDuration .. "s)"
+    ToggleButton.BackgroundColor3 = Color3.new(1, 1, 0)
+
     Connection = RunService.Heartbeat:Connect(InstantAttackAllTargets)
     task.wait(AttackDuration)
-    if Connection then Connection:Disconnect() Connection = nil end
+
+    if Connection then
+        Connection:Disconnect()
+        Connection = nil
+    end
+
+    ToggleButton.Text = "TELEPORTING (REJOINING)"
+    ToggleButton.BackgroundColor3 = Color3.new(0, 0, 1)
 
     TeleportService:Teleport(game.PlaceId, LocalPlayer)
 end
@@ -60,84 +70,241 @@ LocalPlayer.CharacterAdded:Connect(function(Character)
         task.wait(0.5)
         HRP.CFrame = SavedPosition
         SavedPosition = nil
-        IsAttacking = false
-        warn("Warped back to saved position.")
+        warn("Successfully warped back to saved position.")
     end
 end)
 
--- ===== KAVO UI =====
-local function LoadKavoUI()
-    local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
-    local Window = Library.CreateLib("DualHub Main", "GrapeTheme") -- GrapeTheme
+-- ================== Mini Purple 3D UI + Key System ==================
+local MiniUI = {}
+MiniUI.__index = MiniUI
 
-    -- ===== Tab Key =====
-    local KeyTab = Window:NewTab("Key")
-    local KeySection = KeyTab:NewSection("Enter Your Key")
+local KEY_CODE = "dualhub"
+local UserInputService = game:GetService("UserInputService")
 
-    KeySection:NewTextBox("Enter Key...", "Type your key here", function(text)
-        local ScreenGui = Instance.new("ScreenGui")
-        ScreenGui.Name = "KeyPopup"
-        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+local function styleFrame(frame)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = frame
 
-        local Frame = Instance.new("Frame")
-        Frame.Size = UDim2.new(0, 300, 0, 100)
-        Frame.Position = UDim2.new(0.5, -150, 0.5, -50)
-        Frame.BorderSizePixel = 0
-        Frame.Parent = ScreenGui
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(80, 40, 100)
+    stroke.Thickness = 2
+    stroke.Parent = frame
 
-        local Label = Instance.new("TextLabel")
-        Label.Size = UDim2.new(1, 0, 1, 0)
-        Label.BackgroundTransparency = 1
-        Label.TextScaled = true
-        Label.Font = Enum.Font.GothamBold
-        Label.Parent = Frame
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 40, 150)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(150, 70, 220))
+    }
+    gradient.Rotation = 90
+    gradient.Parent = frame
 
-        if text == correctKey then
-            KeyVerified = true
-            Frame.BackgroundColor3 = Color3.fromRGB(128, 0, 128) -- ม่วง
-            Label.Text = "✅ Verify Succeed"
-            Label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        else
-            Frame.BackgroundColor3 = Color3.fromRGB(170, 0, 0) -- แดง
-            Label.Text = "❌ Invalid Key!"
-            Label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        end
-
-        -- ให้ข้อความหายไปหลัง 2 วินาที
-        task.delay(2, function()
-            ScreenGui:Destroy()
-        end)
-    end)
-
-    -- ===== Tab Main =====
-    local MainTab = Window:NewTab("Main")
-    local MainSection = MainTab:NewSection("Functions")
-
-    MainSection:NewButton("Start Save, Kill & Rejoin", "Execute function", function()
-        if KeyVerified then
-            KillAllAndRejoinCycle()
-        else
-            warn("❌ You must enter the correct key first!")
-        end
-    end)
-
-    -- Keybind N
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if not gameProcessed and input.KeyCode == Enum.KeyCode.N then
-            if KeyVerified then
-                KillAllAndRejoinCycle()
-            else
-                warn("❌ You must enter the correct key first!")
-            end
-        end
-    end)
-
-    -- ===== Credits Tab =====
-    local CreditsTab = Window:NewTab("Credits")
-    local CreditsSection = CreditsTab:NewSection("Developers")
-    CreditsSection:NewLabel("Dev Chx")
-    CreditsSection:NewLabel("Dev Victor")
+    local shadow = Instance.new("Frame")
+    shadow.Size = UDim2.new(1,4,1,4)
+    shadow.Position = UDim2.new(0,-2,0,-2)
+    shadow.BackgroundColor3 = Color3.fromRGB(40, 20, 90)
+    shadow.BorderSizePixel = 0
+    shadow.ZIndex = frame.ZIndex - 1
+    shadow.Parent = frame
 end
 
--- เริ่ม UI
-LoadKavoUI()
+local function styleCloseButton(btn)
+    btn.BackgroundColor3 = Color3.fromRGB(180, 50, 150)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 18
+    btn.Text = "X"
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(220, 100, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 50, 150))
+    }
+    gradient.Rotation = 45
+    gradient.Parent = btn
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 180, 255)
+    stroke.Thickness = 2
+    stroke.Parent = btn
+
+    btn.MouseEnter:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(255, 80, 255)
+        btn.Position = btn.Position + UDim2.new(0,0,0,-2)
+    end)
+    btn.MouseLeave:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(180, 50, 150)
+        btn.Position = btn.Position + UDim2.new(0,0,0,2)
+    end)
+end
+
+function MiniUI:CreateWindow(title)
+    local player = game.Players.LocalPlayer
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "MiniUI"
+    gui.ResetOnSpawn = false
+    gui.Parent = player:WaitForChild("PlayerGui")
+
+    local keyFrame = Instance.new("Frame")
+    keyFrame.Size = UDim2.new(0, 300, 0, 150)
+    keyFrame.Position = UDim2.new(0.5, -150, 0.5, -75)
+    keyFrame.BackgroundColor3 = Color3.fromRGB(60, 30, 90)
+    keyFrame.BorderSizePixel = 0
+    keyFrame.Parent = gui
+    styleFrame(keyFrame)
+
+    local keyLabel = Instance.new("TextLabel")
+    keyLabel.Size = UDim2.new(1, -20, 0, 40)
+    keyLabel.Position = UDim2.new(0, 10, 0, 10)
+    keyLabel.BackgroundTransparency = 1
+    keyLabel.Text = "Enter Key to Access UI"
+    keyLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    keyLabel.Font = Enum.Font.GothamBold
+    keyLabel.TextSize = 20
+    keyLabel.Parent = keyFrame
+
+    local keyBox = Instance.new("TextBox")
+    keyBox.Size = UDim2.new(1, -40, 0, 40)
+    keyBox.Position = UDim2.new(0, 10, 0, 60)
+    keyBox.PlaceholderText = "Enter Key Here..."
+    keyBox.BackgroundColor3 = Color3.fromRGB(100, 50, 150)
+    keyBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    keyBox.Font = Enum.Font.Gotham
+    keyBox.TextSize = 18
+    keyBox.ClearTextOnFocus = false
+    keyBox.Parent = keyFrame
+
+    local enterBtn = Instance.new("TextButton")
+    enterBtn.Size = UDim2.new(0, 80, 0, 35)
+    enterBtn.Position = UDim2.new(1, -90, 1, -45)
+    enterBtn.BackgroundColor3 = Color3.fromRGB(120, 60, 200)
+    enterBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    enterBtn.Font = Enum.Font.GothamBold
+    enterBtn.TextSize = 18
+    enterBtn.Text = "Enter"
+    enterBtn.Parent = keyFrame
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = enterBtn
+
+    local function showMainUI()
+        keyFrame:Destroy()
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(0, 250, 0, 180)
+        frame.Position = UDim2.new(0.5, -125, 0.5, -90)
+        frame.BackgroundColor3 = Color3.fromRGB(90, 40, 160)
+        frame.BorderSizePixel = 0
+        frame.Parent = gui
+        styleFrame(frame)
+
+        local titleLabel = Instance.new("TextLabel")
+        titleLabel.Size = UDim2.new(1, -30, 0, 30)
+        titleLabel.Position = UDim2.new(0, 0, 0, 0)
+        titleLabel.BackgroundTransparency = 1
+        titleLabel.Text = title
+        titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        titleLabel.Font = Enum.Font.GothamBold
+        titleLabel.TextSize = 18
+        titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+        titleLabel.Parent = frame
+
+        local closeBtn = Instance.new("TextButton")
+        closeBtn.Size = UDim2.new(0, 30, 0, 30)
+        closeBtn.Position = UDim2.new(1, -30, 0, 0)
+        closeBtn.Parent = frame
+        styleCloseButton(closeBtn)
+        closeBtn.MouseButton1Click:Connect(function()
+            gui:Destroy()
+        end)
+
+        local container = Instance.new("Frame")
+        container.Size = UDim2.new(1, -10, 1, -50)
+        container.Position = UDim2.new(0, 5, 0, 35)
+        container.BackgroundTransparency = 1
+        container.Parent = frame
+
+        local dragging, dragInput, mousePos, framePos = false
+        titleLabel.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                mousePos = input.Position
+                framePos = frame.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then dragging = false end
+                end)
+            end
+        end)
+        titleLabel.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if input == dragInput and dragging then
+                local delta = input.Position - mousePos
+                frame.Position = UDim2.new(framePos.X.Scale, framePos.X.Offset + delta.X, framePos.Y.Scale, framePos.Y.Offset + delta.Y)
+            end
+        end)
+
+        self.Frame = frame
+        self.Container = container
+    end
+
+    enterBtn.MouseButton1Click:Connect(function()
+        if keyBox.Text == KEY_CODE then
+            showMainUI()
+        else
+            keyBox.Text = ""
+            keyBox.PlaceholderText = "Wrong Key!"
+        end
+    end)
+end
+
+function MiniUI:Button(text, callback)
+    if not self.Container then return end
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.BackgroundColor3 = Color3.fromRGB(120, 60, 200)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 16
+    btn.Text = text
+    btn.Parent = self.Container
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = btn
+
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(160,80,255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(200,120,255))
+    }
+    gradient.Rotation = 90
+    gradient.Parent = btn
+
+    btn.MouseEnter:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(220, 120, 255)
+        btn.Position = btn.Position + UDim2.new(0,0,0,-2)
+    end)
+    btn.MouseLeave:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(120, 60, 200)
+        btn.Position = btn.Position + UDim2.new(0,0,0,2)
+    end)
+
+    btn.MouseButton1Click:Connect(callback)
+end
+
+-- ================== ใช้งาน ==================
+local ui = setmetatable({}, MiniUI)
+ui:CreateWindow("Dual Hub Kill all (Kick)")
+
+spawn(function()
+    repeat task.wait() until ui.Container
+    ui:Button("Kill All & Rejoin ( hold a weapon )", function()
+        KillAllAndRejoinCycle(ui.Container.Parent:FindFirstChildWhichIsA("TextButton")) -- ส่งปุ่ม Toggle ให้เปลี่ยนสี/ข้อความ
+    end)
+end)
